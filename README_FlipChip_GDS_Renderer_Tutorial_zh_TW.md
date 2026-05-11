@@ -68,7 +68,74 @@ FL__FL_top
 PF__RO1
 ```
 
-### 2.2 `OBJECT_KEY`
+這個 grammar 最好把每一段想成各自有不同職責。
+
+- `SIM_TYPE`
+  代表這個 simulation object 的語意類型，例如 qubit、readout resonator、feedline、coupler。
+- `OBJECT_KEY`
+  代表同一個 simulation object 共享的身份識別。
+- `LOCAL_COMPONENT`
+  代表可選的本地子名稱，用來說明是哪個局部結構或哪個來源 component 產生這段幾何。
+
+一個很重要的預設行為是：
+
+- renderer 不會把完整三段名稱直接當成最後的 ownership key
+- 在預設情況下，它會把 ownership 收斂成 `<ABBREVIATION>__<OBJECT_KEY>`
+- 所以 `LOCAL_COMPONENT` 主要是幫助可讀性，本身不會自動拆成新的 simulation object
+
+例如：
+
+```text
+RO__Q1__tee
+RO__Q1__route
+RO__Q1__pad
+```
+
+預設都會歸到同一個 simulation object：
+
+```text
+RO__Q1
+```
+
+### 2.2 `SIM_TYPE` 到底代表什麼
+
+`SIM_TYPE` 用來表示這個 object 的語意類型。
+
+它可以用兩種寫法：
+
+- canonical name，例如 `readout_resonator`
+- abbreviation，例如 `RO`
+
+renderer 會透過 `naming_map` 把這兩種寫法正規化。
+
+例如下面兩個名稱：
+
+```text
+readout_resonator__Q1__tee
+RO__Q1__tee
+```
+
+對 renderer 來說是等價的，最後都會正規化成：
+
+```text
+RO__Q1
+```
+
+實務上可以這樣理解：
+
+- `semantic_rules` 和 `semantic_map` 內建議用 canonical name，比較好讀
+- 匯出後的 cell name 則會使用 abbreviation，名稱比較短
+
+常見的 `SIM_TYPE` 例子：
+
+- `FQ` 或 `fluxonium_qubit`
+- `TQ` 或 `transmon_qubit`
+- `RO` 或 `readout_resonator`
+- `CL` 或 `charge_line`
+- `FL` 或 `feedline`
+- `CPL` 或 `coupler`
+
+### 2.3 `OBJECT_KEY` 到底代表什麼
 
 `OBJECT_KEY` 會被當成 opaque semantic token，renderer 不應該把它當成 topology 或數值資訊去解析。
 
@@ -90,7 +157,75 @@ Q17_XY
 BUS_A
 ```
 
-### 2.3 避免錯誤命名
+`OBJECT_KEY` 最重要的是一致性，不是它內部長什麼樣。
+
+例如：
+
+- `RO__Q1__tee` 和 `RO__Q1__route` 會被視為同一個 simulation object，因為兩者都用了 `Q1`
+- `RO__Q1__tee` 和 `RO__Q2__tee` 會被視為不同 simulation object，因為 `OBJECT_KEY` 不同
+
+好的 `OBJECT_KEY` 用法：
+
+- qubit id，例如 `Q1`
+- 成對 id，例如 `Q1_Q2`
+- bus id，例如 `LEFT_RIGHT`
+- 特別命名物件，例如 `MAIN`
+
+不好的用法：
+
+- tee 用一個 key、route 用另一個 key、pad 再用第三個 key，但其實它們本來應該屬於同一個 readout object
+
+### 2.4 `LOCAL_COMPONENT` 到底代表什麼
+
+`LOCAL_COMPONENT` 是可選欄位。
+
+當多個來源 component 或多個局部子結構其實都屬於同一個 semantic object，但你又希望名稱保持可讀性時，就很適合加這一段。
+
+常見例子：
+
+- `RO__Q1__tee`
+- `RO__Q1__route`
+- `RO__Q1__cap`
+- `FL__MAIN__left_arm`
+
+預設情況下：
+
+- `LOCAL_COMPONENT` 不會自動生成新的 simulation object
+- 它主要是人類可讀的後綴
+- 如果你需要，它也可以在 `semantic_rules` template 中透過 `{local_component}` 被使用
+
+這對於「一個 semantic object 是由多個 QComponent 組起來」或「一個 QComponent 內有多種 geometry 群組」的情況很有幫助。
+
+### 2.5 Renderer 會怎麼用這三段資訊
+
+在只靠 naming grammar 的預設情況下，renderer 的流程大致是：
+
+1. 先解析 `SIM_TYPE`
+2. 再透過 `naming_map` 把它正規化
+3. 保留 `OBJECT_KEY`
+4. 除非 `semantic_rules` 或 `semantic_map` 額外使用，否則 `LOCAL_COMPONENT` 不會進入最後的 ownership key
+
+所以像下面這幾個名稱：
+
+```text
+readout_resonator__Q1__tee
+readout_resonator__Q1__route
+RO__Q1__pad
+```
+
+最後都會收斂成：
+
+```text
+RO__Q1
+```
+
+這是理解這個 renderer 最重要的觀念之一：
+
+- `SIM_TYPE` 告訴 renderer「這是什麼類型的物件」
+- `OBJECT_KEY` 告訴 renderer「這是哪一個物件實例」
+- `LOCAL_COMPONENT` 告訴 renderer「這是這個物件的哪一個局部結構」
+
+### 2.6 分隔規則與常見錯法
 
 例如這種名稱：
 
@@ -105,6 +240,27 @@ FL__FL_top__path1
 ```
 
 這個 renderer 目前採用 strict naming，不建議依賴 renderer 幫你容錯或猜測原意。
+
+另外也要注意：
+
+- `OBJECT_KEY` 和 `LOCAL_COMPONENT` 內可以有單一底線 `_`
+- 雙底線 `__` 是保留給 grammar 分段用的
+- 空白或超出 `[A-Za-z0-9_-]` 的符號都不合法
+
+好的例子：
+
+```text
+RO__Q1_Q2__left_stub
+FL__MAIN_BUS__segment_a
+```
+
+不好的例子：
+
+```text
+RO__Q1__left__stub
+FL__MAIN BUS__segment
+RO__Q1/2__tee
+```
 
 ## 3. 最小使用範例
 

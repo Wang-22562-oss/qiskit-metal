@@ -66,7 +66,74 @@ FL__FL_top
 PF__RO1
 ```
 
-### 2.2 `OBJECT_KEY`
+This grammar is easiest to understand if you treat each block as having a distinct job.
+
+- `SIM_TYPE`
+  The semantic family of the simulation object, such as qubit, readout resonator, feedline, or coupler.
+- `OBJECT_KEY`
+  The shared identity token for all layout pieces that belong to the same final simulation object.
+- `LOCAL_COMPONENT`
+  An optional local label that tells you which physical sub-part or source component produced the geometry.
+
+Important default behavior:
+
+- the renderer does not keep the full three-part name as the final ownership key
+- by default, it collapses ownership to `<ABBREVIATION>__<OBJECT_KEY>`
+- this means `LOCAL_COMPONENT` helps readability, but does not create a separate simulation object by itself
+
+For example:
+
+```text
+RO__Q1__tee
+RO__Q1__route
+RO__Q1__pad
+```
+
+all default to the same simulation object:
+
+```text
+RO__Q1
+```
+
+### 2.2 What `SIM_TYPE` means
+
+`SIM_TYPE` identifies the semantic type of the object.
+
+It can be written in either of these two styles:
+
+- canonical name, such as `readout_resonator`
+- abbreviation, such as `RO`
+
+The renderer normalizes both styles through `naming_map`.
+
+For example, these two names are treated as equivalent:
+
+```text
+readout_resonator__Q1__tee
+RO__Q1__tee
+```
+
+and both normalize to the same exported object name:
+
+```text
+RO__Q1
+```
+
+Practical interpretation:
+
+- use canonical names in `semantic_rules` and `semantic_map` because they are more readable
+- use abbreviations in exported cell names because they stay compact
+
+Typical `SIM_TYPE` examples:
+
+- `FQ` or `fluxonium_qubit`
+- `TQ` or `transmon_qubit`
+- `RO` or `readout_resonator`
+- `CL` or `charge_line`
+- `FL` or `feedline`
+- `CPL` or `coupler`
+
+### 2.3 What `OBJECT_KEY` means
 
 `OBJECT_KEY` is treated as an opaque semantic token. The renderer should not try to interpret it as topology or numeric structure.
 
@@ -88,7 +155,75 @@ Q17_XY
 BUS_A
 ```
 
-### 2.3 Avoid malformed names
+What matters is consistency, not internal meaning.
+
+For example:
+
+- `RO__Q1__tee` and `RO__Q1__route` belong to the same simulation object because both use `Q1`
+- `RO__Q1__tee` and `RO__Q2__tee` belong to different simulation objects because their `OBJECT_KEY` values differ
+
+Good uses of `OBJECT_KEY`:
+
+- a qubit id such as `Q1`
+- a pair id such as `Q1_Q2`
+- a bus id such as `LEFT_RIGHT`
+- a special named object such as `MAIN`
+
+Bad use pattern:
+
+- using one `OBJECT_KEY` for the tee, a different one for the route, and a third one for the pad when they are supposed to represent one readout object
+
+### 2.4 What `LOCAL_COMPONENT` means
+
+`LOCAL_COMPONENT` is optional.
+
+Use it when several source components or sub-parts belong to the same semantic object and you still want names to stay readable.
+
+Typical examples:
+
+- `RO__Q1__tee`
+- `RO__Q1__route`
+- `RO__Q1__cap`
+- `FL__MAIN__left_arm`
+
+By default:
+
+- `LOCAL_COMPONENT` does not create a new simulation object
+- it is mainly a human-readable suffix
+- it is also available to `semantic_rules` templates through `{local_component}` if you want custom behavior
+
+This is useful when one semantic object is assembled from multiple QComponents or from multiple geometry groups inside one QComponent.
+
+### 2.5 How the renderer uses the three blocks together
+
+At default grammar-only resolution:
+
+1. the renderer parses `SIM_TYPE`
+2. it normalizes that type through `naming_map`
+3. it keeps `OBJECT_KEY`
+4. it ignores `LOCAL_COMPONENT` for final ownership unless a semantic rule or map uses it explicitly
+
+So these names:
+
+```text
+readout_resonator__Q1__tee
+readout_resonator__Q1__route
+RO__Q1__pad
+```
+
+all converge to:
+
+```text
+RO__Q1
+```
+
+This is one of the most important mental models for the renderer:
+
+- `SIM_TYPE` says what kind of object it is
+- `OBJECT_KEY` says which object instance it is
+- `LOCAL_COMPONENT` says which local piece produced this geometry
+
+### 2.6 Separator rules and malformed names
 
 For example:
 
@@ -103,6 +238,27 @@ FL__FL_top__path1
 ```
 
 This renderer uses strict naming rules. It is better to fix names at the component level than to rely on renderer-side guessing.
+
+Also note:
+
+- single underscores are allowed inside `OBJECT_KEY` and `LOCAL_COMPONENT`
+- double underscores are reserved for grammar separation
+- spaces and punctuation outside `[A-Za-z0-9_-]` are invalid
+
+Good:
+
+```text
+RO__Q1_Q2__left_stub
+FL__MAIN_BUS__segment_a
+```
+
+Bad:
+
+```text
+RO__Q1__left__stub
+FL__MAIN BUS__segment
+RO__Q1/2__tee
+```
 
 ## 3. Minimal Usage Example
 
