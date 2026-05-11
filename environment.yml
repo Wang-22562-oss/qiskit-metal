@@ -2,7 +2,7 @@ name: qiskit-metal
 channels:
   - conda-forge
 dependencies:
-  - python>=3.10 # Let's see if we can float higher in future.
+  - python>=3.2 # Let's see if we can float higher in future.
   - scqubits~=3.1.0 # Very careful to update higher, as it can break things. Want to update in future.
   - addict~=2.4
   - geopandas>=0.12.2

@@ -42,7 +42,10 @@ renderers_to_load = Dict(
     aedt_hfss=Dict(
         path_name=
         'qiskit_metal.renderers.renderer_ansys_pyaedt.hfss_renderer_aedt',
-        class_name='QHFSSPyaedt'))
+        class_name='QHFSSPyaedt'),
+    FCgds=Dict(path_name='qiskit_metal.renderers.renderer_gds.FlipChip_gds_renderer',
+             class_name='MyGDSRenderer'),
+
 """
 Define the renderes to load. Just provide the module names here.
 """
